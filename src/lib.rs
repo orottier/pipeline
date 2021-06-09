@@ -17,7 +17,7 @@ mod tests {
         let u = Unpack {};
         let l = Lines {};
 
-        let genesis = FlowFile {
+        let genesis = AnyFlowFile {
             data: Box::new(()),
             source: "".into(),
         };
@@ -39,15 +39,15 @@ mod tests {
         let u = Unpack {};
         let l = Lines {};
 
-        let genesis = FlowFile {
+        let genesis = AnyFlowFile {
             data: Box::new(()),
             source: "".into(),
         };
-        let mut a: ChainAny = ChainAny {
+        let mut a: AnyChain = AnyChain {
             first: Box::new(g),
             next: Box::new(u),
         };
-        a = ChainAny {
+        a = AnyChain {
             first: Box::new(a),
             next: Box::new(l),
         };
