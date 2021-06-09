@@ -11,15 +11,30 @@ pub struct FlowFile {
     source: String,
 }
 
-pub trait Transformer {
-    fn transform(&self, input: FlowFile) -> Box<dyn Iterator<Item = FlowFile> + Send>;
+pub trait Transform {
+    fn transform(&self, input: FlowFile) -> Box<dyn Iterator<Item = FlowFile> + Send + '_>;
+}
+
+struct ChainAny {
+    first: Box<dyn Transform + Send + Sync + 'static>,
+    next: Box<dyn Transform + Send + Sync + 'static>,
+}
+
+impl Transform for ChainAny {
+    fn transform(&self, input: FlowFile) -> Box<dyn Iterator<Item = FlowFile> + Send + '_> {
+        let iter = self
+            .first
+            .transform(input)
+            .flat_map(move |o| self.next.transform(o));
+        Box::new(iter)
+    }
 }
 
 struct Glob {
     patterns: Vec<String>,
 }
 
-impl Transformer for Glob {
+impl Transform for Glob {
     fn transform(&self, _input: FlowFile) -> Box<dyn Iterator<Item = FlowFile> + Send> {
         let iter = self
             .patterns
@@ -46,7 +61,7 @@ impl Transformer for Glob {
 
 struct Unpack {}
 
-impl Transformer for Unpack {
+impl Transform for Unpack {
     fn transform(&self, input: FlowFile) -> Box<dyn Iterator<Item = FlowFile> + Send> {
         let path = input.data.downcast_ref::<PathBuf>().unwrap();
         let file = File::open(path).unwrap();
@@ -67,7 +82,7 @@ impl Transformer for Unpack {
 
 struct Lines {}
 
-impl Transformer for Lines {
+impl Transform for Lines {
     fn transform(&self, input: FlowFile) -> Box<dyn Iterator<Item = FlowFile> + Send> {
         let FlowFile { data, source } = input;
         let file = data.downcast::<File>().unwrap();
@@ -96,7 +111,7 @@ mod tests {
     #[test]
     fn it_works() {
         let g = Glob {
-            patterns: vec!["*.csv".into()],
+            patterns: vec!["*.toml".into()],
         };
         let u = Unpack {};
         let l = Lines {};
@@ -113,5 +128,30 @@ mod tests {
             .count();
 
         assert_eq!(a, 12);
+    }
+
+    #[test]
+    fn chain_any() {
+        let g = Glob {
+            patterns: vec!["*.toml".into()],
+        };
+        let u = Unpack {};
+        let l = Lines {};
+
+        let genesis = FlowFile {
+            data: Box::new(()),
+            source: "".into(),
+        };
+        let mut a: ChainAny = ChainAny {
+            first: Box::new(g),
+            next: Box::new(u),
+        };
+        a = ChainAny {
+            first: Box::new(a),
+            next: Box::new(l),
+        };
+
+        let c = a.transform(genesis).count();
+        assert_eq!(c, 12);
     }
 }
