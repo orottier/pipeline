@@ -1,4 +1,4 @@
-use crate::framework::{AnyFlowFile, AnyTransform};
+use crate::framework::*;
 
 use flate2::read::GzDecoder;
 use glob::glob;
@@ -11,6 +11,37 @@ use std::path::PathBuf;
 pub struct Glob {
     pub patterns: Vec<String>,
 }
+
+impl Transform for Glob {
+    type Input = ();
+    type Output = PathBuf;
+
+    fn transform(&self, _input: Self::Input) -> Box<dyn Iterator<Item = Self::Output> + Send + '_> {
+        let iter = self
+            .patterns
+            .clone()
+            .into_iter()
+            .flat_map(|pat| glob(&pat).expect("bad glob pattern"))
+            .flat_map(|glob| match glob {
+                Ok(path) => {
+                    /*
+                    let flowfile = AnyFlowFile {
+                        data: Box::new(path),
+                        source: "".to_string(),
+                    };
+                    */
+                    Some(path)
+                }
+                Err(e) => {
+                    dbg!(e);
+                    None
+                }
+            });
+
+        Box::new(iter)
+    }
+}
+
 
 impl AnyTransform for Glob {
     fn transform(&self, _input: AnyFlowFile) -> Box<dyn Iterator<Item = AnyFlowFile> + Send> {
