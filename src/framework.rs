@@ -17,17 +17,44 @@ pub trait Transform {
     fn transform(&self, input: Self::Input) -> Box<dyn Iterator<Item = Self::Output> + Send + '_>;
 }
 
-impl<O> dyn Transform<Input=(), Output=O> {
-    //fn connect
-}
-
 pub trait AnyTransform {
-    fn transform(&self, input: AnyFlowFile) -> Box<dyn Iterator<Item = AnyFlowFile> + Send + '_>;
+    fn transform_any(
+        &self,
+        input: AnyFlowFile,
+    ) -> Box<dyn Iterator<Item = AnyFlowFile> + Send + '_>;
 }
 
 pub struct Chain<A, B> {
     pub first: A,
     pub next: B,
+}
+
+impl<A, B: Transform> Chain<A, B> {
+    pub fn chain<C>(self, next: C) -> Chain<Chain<A, B>, C>
+    where
+        C: Transform<Input = B::Output>,
+    {
+        Chain { first: self, next }
+    }
+}
+
+impl<A: Transform<Input = ()> + Sync, B: Transform<Output = ()> + Sync> Chain<A, B>
+where
+    B: Transform<Input = A::Output>,
+{
+    pub fn run(self) -> u64 {
+        let genesis = ();
+        let mut counter = 0;
+
+        self.transform(genesis).for_each(|_| {
+            counter += 1;
+            if counter % 1_000_000 == 0 {
+                eprintln!("processed {}", counter);
+            }
+        });
+
+        counter
+    }
 }
 
 impl<A: Transform + Sync, B: Sync> Transform for Chain<A, B>
@@ -52,11 +79,14 @@ pub struct AnyChain {
 }
 
 impl AnyTransform for AnyChain {
-    fn transform(&self, input: AnyFlowFile) -> Box<dyn Iterator<Item = AnyFlowFile> + Send + '_> {
+    fn transform_any(
+        &self,
+        input: AnyFlowFile,
+    ) -> Box<dyn Iterator<Item = AnyFlowFile> + Send + '_> {
         let iter = self
             .first
-            .transform(input)
-            .flat_map(move |o| self.next.transform(o));
+            .transform_any(input)
+            .flat_map(move |o| self.next.transform_any(o));
         Box::new(iter)
     }
 }
