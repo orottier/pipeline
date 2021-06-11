@@ -24,9 +24,29 @@ pub trait AnyTransform {
     ) -> Box<dyn Iterator<Item = AnyFlowFile> + Send + '_>;
 }
 
+pub struct Pipeline<A> {
+    first: A,
+}
+
+impl<A: Transform<Input = ()> + Sync> Pipeline<A> {
+    pub fn new(first: A) -> Self {
+        Self { first }
+    }
+
+    pub fn chain<B>(self, next: B) -> Chain<A, B>
+    where
+        B: Transform<Input = A::Output>,
+    {
+        Chain {
+            first: self.first,
+            next,
+        }
+    }
+}
+
 pub struct Chain<A, B> {
-    pub first: A,
-    pub next: B,
+    first: A,
+    next: B,
 }
 
 impl<A, B: Transform> Chain<A, B> {

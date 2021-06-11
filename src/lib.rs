@@ -10,28 +10,6 @@ mod tests {
     use rayon::prelude::ParallelIterator;
 
     #[test]
-    fn it_works() {
-        let g = Glob {
-            patterns: vec!["*.toml".into()],
-        };
-        let u = Unpack {};
-        let l = Lines {};
-
-        let genesis = AnyFlowFile {
-            data: Box::new(()),
-            source: "".into(),
-        };
-        let a = g
-            .transform_any(genesis)
-            .par_bridge()
-            .flat_map(|i| u.transform_any(i).par_bridge())
-            .flat_map(|i| l.transform_any(i).par_bridge())
-            .count();
-
-        assert_eq!(a, 12);
-    }
-
-    #[test]
     fn chain() {
         let g = Glob {
             patterns: vec!["*.toml".into()],
@@ -40,10 +18,9 @@ mod tests {
         let l = Lines {};
         let n = Nullify::default();
 
-        let a = Chain { first: g, next: u };
-        let a = a.chain(l).chain(n);
+        let result = Pipeline::new(g).chain(u).chain(l).chain(n).run();
 
-        assert_eq!(a.run(), 12);
+        assert_eq!(result, 12);
     }
 
     #[test]
