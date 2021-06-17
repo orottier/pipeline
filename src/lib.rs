@@ -9,8 +9,10 @@ mod tests {
     use rayon::iter::ParallelBridge;
     use rayon::prelude::ParallelIterator;
 
+    use std::sync::atomic::{AtomicU64, Ordering};
+
     #[test]
-    fn chain() {
+    fn it_works() {
         let g = Glob {
             patterns: vec!["*.toml".into()],
         };
@@ -18,33 +20,45 @@ mod tests {
         let l = Lines {};
         let n = Nullify::default();
 
-        let result = Pipeline::new(g).chain(u).chain(l).chain(n).run();
+        let a1 = Identity::default();
+        let a2 = Identity::default();
+        let b2 = Identity::default();
 
-        assert_eq!(result, 12);
-    }
+        let counter = AtomicU64::new(0);
 
-    #[test]
-    fn chain_any() {
-        let g = Glob {
-            patterns: vec!["*.toml".into()],
-        };
-        let u = Unpack {};
-        let l = Lines {};
+        g.transform(())
+            .par_bridge()
+            .flat_map(|i| u.transform(i).par_bridge())
+            .for_each(|i| {
+                if true {
+                    a1.transform(i)
+                        .par_bridge()
+                        //-- same
+                        .flat_map(|i| l.transform(i).par_bridge())
+                        .flat_map(|i| n.transform(i).par_bridge())
+                        .for_each(|()| {
+                            let cur = counter.fetch_add(1, Ordering::Relaxed);
+                            if cur % 1_000_000 == 0 {
+                                eprintln!("processed {}", cur);
+                            }
+                        })
+                } else {
+                    a2.transform(i)
+                        .par_bridge()
+                        .flat_map(|i| b2.transform(i).par_bridge())
+                        //-- same
+                        .flat_map(|i| l.transform(i).par_bridge())
+                        .flat_map(|i| n.transform(i).par_bridge())
+                        .for_each(|()| {
+                            let cur = counter.fetch_add(1, Ordering::Relaxed);
+                            if cur % 1_000_000 == 0 {
+                                eprintln!("processed {}", cur);
+                            }
+                        })
+                }
+            });
 
-        let genesis = AnyFlowFile {
-            data: Box::new(()),
-            source: "".into(),
-        };
-        let mut a: AnyChain = AnyChain {
-            first: Box::new(g),
-            next: Box::new(u),
-        };
-        a = AnyChain {
-            first: Box::new(a),
-            next: Box::new(l),
-        };
-
-        let c = a.transform_any(genesis).count();
-        assert_eq!(c, 12);
+        let count = counter.load(Ordering::Relaxed);
+        assert_eq!(count, 12);
     }
 }
