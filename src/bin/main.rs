@@ -44,7 +44,7 @@ fn main() {
                 None
             }
         })
-        .filter(|record| record.iter().any(|v| v == "1"))
+        .filter(|record| record.iter().any(|v| v.contains("1")))
         .count();
 
     dbg!(a);

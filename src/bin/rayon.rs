@@ -10,12 +10,14 @@ fn main() {
     };
     let u = Unpack {};
     let c = Csv {};
+    let f = Contains::new("1");
 
     let r = g
         .transform(FlowFile::genesis())
         .par_bridge()
         .flat_map(|i| u.transform(i).par_bridge())
         .flat_map(|i| c.transform(i).par_bridge())
+        .flat_map(|i| f.transform(i).par_bridge())
         .count();
 
     dbg!(r);

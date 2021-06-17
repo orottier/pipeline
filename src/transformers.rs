@@ -162,6 +162,49 @@ impl Transform for Csv {
     }
 }
 
-pub struct Contains {
-    needle: Vec<u8>,
+pub struct Contains<R> {
+    needle: String,
+    _marker: PhantomData<R>,
+}
+
+impl<R> Contains<R> {
+    pub fn new<S: Into<String>>(needle: S) -> Self {
+        Self {
+            needle: needle.into(),
+            _marker: PhantomData,
+        }
+    }
+}
+
+pub trait CheckContains {
+    fn contains(&self, needle: &str) -> bool;
+}
+
+impl CheckContains for String {
+    fn contains(&self, needle: &str) -> bool {
+        self.as_str().contains(needle)
+    }
+}
+impl CheckContains for Vec<u8> {
+    fn contains(&self, needle: &str) -> bool {
+        std::str::from_utf8(&self)
+            .map(|s| s.contains(needle))
+            .unwrap_or(false)
+    }
+}
+impl CheckContains for csv::StringRecord {
+    fn contains(&self, needle: &str) -> bool {
+        self.iter().any(|i| i.contains(needle))
+    }
+}
+
+impl<S: CheckContains + Send> Transform for Contains<S> {
+    type Input = S;
+    type Output = S;
+    type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
+
+    fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter {
+        let contains = input.data.contains(&self.needle);
+        std::iter::once(input).filter(move |_| contains)
+    }
 }
