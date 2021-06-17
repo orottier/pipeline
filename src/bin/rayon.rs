@@ -1,4 +1,4 @@
-use rayon_ingest::framework::Transform;
+use rayon_ingest::framework::*;
 use rayon_ingest::transformers::*;
 
 use rayon::iter::ParallelBridge;
@@ -12,7 +12,7 @@ fn main() {
     let c = Csv {};
 
     let r = g
-        .transform(())
+        .transform(FlowFile::genesis())
         .par_bridge()
         .flat_map(|i| u.transform(i).par_bridge())
         .flat_map(|i| c.transform(i).par_bridge())

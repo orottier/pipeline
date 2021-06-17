@@ -16,7 +16,10 @@ impl Transform for Glob {
     type Input = ();
     type Output = PathBuf;
 
-    fn transform(&self, _input: Self::Input) -> Box<dyn Iterator<Item = Self::Output> + Send + '_> {
+    fn transform(
+        &self,
+        _input: FlowFile<Self::Input>,
+    ) -> Box<dyn Iterator<Item = FlowFile<Self::Output>> + Send + '_> {
         let iter = self
             .patterns
             .clone()
@@ -28,6 +31,10 @@ impl Transform for Glob {
                     dbg!(e);
                     None
                 }
+            })
+            .map(|path| FlowFile {
+                data: path,
+                source: String::new(),
             });
 
         Box::new(iter)
@@ -40,7 +47,12 @@ impl Transform for Unpack {
     type Input = PathBuf;
     type Output = Box<dyn Read + Send + Sync>;
 
-    fn transform(&self, input: Self::Input) -> Box<dyn Iterator<Item = Self::Output> + Send> {
+    fn transform(
+        &self,
+        input: FlowFile<Self::Input>,
+    ) -> Box<dyn Iterator<Item = FlowFile<Self::Output>> + Send> {
+        let input = input.data; // unwrap flowfile
+
         let file = File::open(&input).unwrap();
         let reader = if matches!(input.to_str(), Some(p) if p.ends_with(".gz")) {
             Box::new(GzDecoder::new(file)) as Box<dyn Read + Send + Sync>
@@ -48,7 +60,15 @@ impl Transform for Unpack {
             Box::new(file) as _
         };
 
-        Box::new(std::iter::once(reader))
+        let flow_file = FlowFile {
+            data: reader,
+            source: input.to_string_lossy().into(),
+        };
+        let iter = std::iter::once(flow_file);
+
+        let closeable = CloseableIter::new(iter, move || println!("done processing {:?}", input));
+
+        Box::new(closeable)
     }
 }
 
@@ -58,8 +78,21 @@ impl Transform for Lines {
     type Input = Box<dyn Read + Send + Sync>;
     type Output = String;
 
-    fn transform(&self, input: Self::Input) -> Box<dyn Iterator<Item = Self::Output> + Send> {
-        Box::new(BufReader::new(input).lines().flat_map(Result::ok))
+    fn transform(
+        &self,
+        input: FlowFile<Self::Input>,
+    ) -> Box<dyn Iterator<Item = FlowFile<Self::Output>> + Send> {
+        let FlowFile { data, source } = input;
+        let iter = BufReader::new(data)
+            .lines()
+            .flat_map(Result::ok)
+            .enumerate()
+            .map(move |(i, l)| FlowFile {
+                data: l,
+                source: format!("{}:{}", source, i),
+            });
+
+        Box::new(iter)
     }
 }
 
@@ -79,8 +112,12 @@ impl<A> Transform for Nullify<A> {
     type Input = A;
     type Output = ();
 
-    fn transform(&self, _input: Self::Input) -> Box<dyn Iterator<Item = Self::Output> + Send> {
-        Box::new(std::iter::once(()))
+    fn transform(
+        &self,
+        input: FlowFile<Self::Input>,
+    ) -> Box<dyn Iterator<Item = FlowFile<Self::Output>> + Send> {
+        let FlowFile { data: _, source } = input;
+        Box::new(std::iter::once(FlowFile { data: (), source }))
     }
 }
 
@@ -100,7 +137,10 @@ impl<A: Send + Sync + 'static> Transform for Identity<A> {
     type Input = A;
     type Output = A;
 
-    fn transform(&self, input: Self::Input) -> Box<dyn Iterator<Item = Self::Output> + Send> {
+    fn transform(
+        &self,
+        input: FlowFile<Self::Input>,
+    ) -> Box<dyn Iterator<Item = FlowFile<Self::Output>> + Send> {
         Box::new(std::iter::once(input))
     }
 }
@@ -111,8 +151,12 @@ impl Transform for Csv {
     type Input = Box<dyn Read + Send + Sync>;
     type Output = csv::StringRecord;
 
-    fn transform(&self, input: Self::Input) -> Box<dyn Iterator<Item = Self::Output> + Send> {
-        let iter = csv::Reader::from_reader(input)
+    fn transform(
+        &self,
+        input: FlowFile<Self::Input>,
+    ) -> Box<dyn Iterator<Item = FlowFile<Self::Output>> + Send> {
+        let FlowFile { data, source } = input;
+        let iter = csv::Reader::from_reader(data)
             .into_records()
             .flat_map(|r| match r {
                 Ok(v) => Some(v),
@@ -120,6 +164,11 @@ impl Transform for Csv {
                     dbg!(e);
                     None
                 }
+            })
+            .enumerate()
+            .map(move |(i, r)| FlowFile {
+                data: r,
+                source: format!("{}:{}", source, i),
             });
         Box::new(iter)
     }
