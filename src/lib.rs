@@ -1,3 +1,5 @@
+#![feature(min_type_alias_impl_trait)]
+
 pub mod framework;
 pub mod transformers;
 

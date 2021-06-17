@@ -15,11 +15,9 @@ impl FlowFile<()> {
 pub trait Transform {
     type Input;
     type Output;
+    type Iter: Iterator<Item = FlowFile<Self::Output>> + Send;
 
-    fn transform(
-        &self,
-        input: FlowFile<Self::Input>,
-    ) -> Box<dyn Iterator<Item = FlowFile<Self::Output>> + Send + '_>;
+    fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter;
 }
 
 pub struct CloseableIter<I: Iterator, F: Fn()> {

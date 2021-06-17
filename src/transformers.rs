@@ -15,11 +15,9 @@ pub struct Glob {
 impl Transform for Glob {
     type Input = ();
     type Output = PathBuf;
+    type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
 
-    fn transform(
-        &self,
-        _input: FlowFile<Self::Input>,
-    ) -> Box<dyn Iterator<Item = FlowFile<Self::Output>> + Send + '_> {
+    fn transform(&self, _input: FlowFile<Self::Input>) -> Self::Iter {
         let iter = self
             .patterns
             .clone()
@@ -37,7 +35,7 @@ impl Transform for Glob {
                 source: String::new(),
             });
 
-        Box::new(iter)
+        iter
     }
 }
 
@@ -46,11 +44,9 @@ pub struct Unpack {}
 impl Transform for Unpack {
     type Input = PathBuf;
     type Output = Box<dyn Read + Send + Sync>;
+    type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
 
-    fn transform(
-        &self,
-        input: FlowFile<Self::Input>,
-    ) -> Box<dyn Iterator<Item = FlowFile<Self::Output>> + Send> {
+    fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter {
         let input = input.data; // unwrap flowfile
 
         let file = File::open(&input).unwrap();
@@ -68,7 +64,7 @@ impl Transform for Unpack {
 
         let closeable = CloseableIter::new(iter, move || println!("done processing {:?}", input));
 
-        Box::new(closeable)
+        closeable
     }
 }
 
@@ -77,11 +73,9 @@ pub struct Lines {}
 impl Transform for Lines {
     type Input = Box<dyn Read + Send + Sync>;
     type Output = String;
+    type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
 
-    fn transform(
-        &self,
-        input: FlowFile<Self::Input>,
-    ) -> Box<dyn Iterator<Item = FlowFile<Self::Output>> + Send> {
+    fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter {
         let FlowFile { data, source } = input;
         let iter = BufReader::new(data)
             .lines()
@@ -92,7 +86,7 @@ impl Transform for Lines {
                 source: format!("{}:{}", source, i),
             });
 
-        Box::new(iter)
+        iter
     }
 }
 
@@ -111,13 +105,11 @@ impl<A> Default for Nullify<A> {
 impl<A> Transform for Nullify<A> {
     type Input = A;
     type Output = ();
+    type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
 
-    fn transform(
-        &self,
-        input: FlowFile<Self::Input>,
-    ) -> Box<dyn Iterator<Item = FlowFile<Self::Output>> + Send> {
+    fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter {
         let FlowFile { data: _, source } = input;
-        Box::new(std::iter::once(FlowFile { data: (), source }))
+        std::iter::once(FlowFile { data: (), source })
     }
 }
 
@@ -136,12 +128,10 @@ impl<A> Default for Identity<A> {
 impl<A: Send + Sync + 'static> Transform for Identity<A> {
     type Input = A;
     type Output = A;
+    type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
 
-    fn transform(
-        &self,
-        input: FlowFile<Self::Input>,
-    ) -> Box<dyn Iterator<Item = FlowFile<Self::Output>> + Send> {
-        Box::new(std::iter::once(input))
+    fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter {
+        std::iter::once(input)
     }
 }
 
@@ -150,11 +140,9 @@ pub struct Csv {}
 impl Transform for Csv {
     type Input = Box<dyn Read + Send + Sync>;
     type Output = csv::StringRecord;
+    type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
 
-    fn transform(
-        &self,
-        input: FlowFile<Self::Input>,
-    ) -> Box<dyn Iterator<Item = FlowFile<Self::Output>> + Send> {
+    fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter {
         let FlowFile { data, source } = input;
         let iter = csv::Reader::from_reader(data)
             .into_records()
@@ -170,6 +158,10 @@ impl Transform for Csv {
                 data: r,
                 source: format!("{}:{}", source, i),
             });
-        Box::new(iter)
+        iter
     }
+}
+
+pub struct Contains {
+    needle: Vec<u8>,
 }
