@@ -62,7 +62,8 @@ impl Transform for Unpack {
         };
         let iter = std::iter::once(flow_file);
 
-        let closeable = CloseableIter::new(iter, move || println!("done processing {:?}", input));
+        let closeable =
+            CloseableIter::new(iter, move || log::debug!("done processing {:?}", input));
 
         closeable
     }
