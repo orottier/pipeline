@@ -6,18 +6,23 @@ use rayon::prelude::ParallelIterator;
 
 fn main() {
     let g = Glob {
-        patterns: vec!["*.csv".to_string(), "*.csv.gz".to_string()],
+        patterns: vec!["open*.csv".to_string()],
     };
     let u = Unpack {};
+    let l = Lines {};
+    /*
     let c = Csv {};
+    */
     let f = Contains::new("1");
+    let w = Write::new("output.tar.gz");
 
     let r = g
         .transform(FlowFile::genesis())
         .par_bridge()
         .flat_map(|i| u.transform(i).par_bridge())
-        .flat_map(|i| c.transform(i).par_bridge())
+        .flat_map(|i| l.transform(i).par_bridge())
         .flat_map(|i| f.transform(i).par_bridge())
+        .flat_map(|i| w.transform(i).par_bridge())
         .count();
 
     dbg!(r);

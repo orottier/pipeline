@@ -1,12 +1,13 @@
 use crate::framework::*;
 
-use flate2::read::GzDecoder;
+use flate2::{read::GzDecoder, write::GzEncoder};
 use glob::glob;
 
-use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::fs::{File, OpenOptions};
+use std::io::{BufRead, BufReader, BufWriter, Read};
 use std::marker::PhantomData;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 pub struct Glob {
     pub patterns: Vec<String>,
@@ -159,6 +160,47 @@ impl Transform for Csv {
                 source: format!("{}:{}", source, i),
             });
         iter
+    }
+}
+
+pub struct Write {
+    builder: Mutex<tar::Builder<GzEncoder<BufWriter<File>>>>,
+}
+
+impl Write {
+    pub fn new<P: AsRef<Path>>(path: P) -> Self {
+        let file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path.as_ref())
+            .unwrap();
+        let buffered = BufWriter::new(file);
+        let gz = GzEncoder::new(buffered, flate2::Compression::default());
+        let tar = tar::Builder::new(gz);
+
+        let builder = Mutex::new(tar);
+
+        Self { builder }
+    }
+}
+
+impl Transform for Write {
+    type Input = String;
+    type Output = ();
+    type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
+
+    fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter {
+        let FlowFile { data, source } = input;
+        let data = data.as_bytes();
+
+        let mut header = tar::Header::new_gnu();
+        header.set_size(data.len() as u64);
+        header.set_cksum();
+
+        let mut ar = self.builder.lock().unwrap();
+        ar.append_data(&mut header, &source, data).unwrap();
+
+        std::iter::once(FlowFile { data: (), source })
     }
 }
 
