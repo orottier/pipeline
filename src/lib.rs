@@ -14,7 +14,7 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     #[test]
-    fn it_works() {
+    fn test_nonlinear_flow() {
         let g = Glob {
             patterns: vec!["*.toml".into()],
         };
