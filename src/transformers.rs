@@ -13,12 +13,11 @@ pub struct Glob {
     pub patterns: Vec<String>,
 }
 
-impl Transform for Glob {
-    type Input = ();
+impl StartTransform for Glob {
     type Output = PathBuf;
     type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
 
-    fn transform(&self, _input: FlowFile<Self::Input>) -> Self::Iter {
+    fn start(&self) -> Self::Iter {
         let iter = self
             .patterns
             .clone()
@@ -103,14 +102,11 @@ impl<A> Default for Nullify<A> {
     }
 }
 
-impl<A> Transform for Nullify<A> {
+impl<A> CloseTransform for Nullify<A> {
     type Input = A;
-    type Output = ();
-    type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
 
-    fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter {
-        let FlowFile { data: _, source } = input;
-        std::iter::once(FlowFile { data: (), source })
+    fn close(&self, _input: FlowFile<Self::Input>) {
+        // do nothing
     }
 }
 
@@ -184,12 +180,10 @@ impl Write {
     }
 }
 
-impl Transform for Write {
+impl CloseTransform for Write {
     type Input = String;
-    type Output = ();
-    type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
 
-    fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter {
+    fn close(&self, input: FlowFile<Self::Input>) {
         let FlowFile { data, source } = input;
         let data = data.as_bytes();
 
@@ -199,8 +193,6 @@ impl Transform for Write {
 
         let mut ar = self.builder.lock().unwrap();
         ar.append_data(&mut header, &source, data).unwrap();
-
-        std::iter::once(FlowFile { data: (), source })
     }
 }
 

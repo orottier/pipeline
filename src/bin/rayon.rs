@@ -16,14 +16,10 @@ fn main() {
     let f = Contains::new("1");
     let w = Write::new("output.tar.gz");
 
-    let r = g
-        .transform(FlowFile::genesis())
+    g.start()
         .par_bridge()
         .flat_map(|i| u.transform(i).par_bridge())
         .flat_map(|i| l.transform(i).par_bridge())
         .flat_map(|i| f.transform(i).par_bridge())
-        .flat_map(|i| w.transform(i).par_bridge())
-        .count();
-
-    dbg!(r);
+        .for_each(|i| w.close(i));
 }

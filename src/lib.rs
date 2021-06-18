@@ -28,7 +28,7 @@ mod tests {
 
         let counter = AtomicU64::new(0);
 
-        g.transform(FlowFile::genesis())
+        g.start()
             .par_bridge()
             .flat_map(|i| u.transform(i).par_bridge())
             .for_each(|i| {
@@ -37,8 +37,8 @@ mod tests {
                         .par_bridge()
                         //-- same
                         .flat_map(|i| l.transform(i).par_bridge())
-                        .flat_map(|i| n.transform(i).par_bridge())
-                        .for_each(|_| {
+                        .for_each(|i| {
+                            n.close(i);
                             let cur = counter.fetch_add(1, Ordering::Relaxed);
                             if cur % 1_000_000 == 0 {
                                 eprintln!("processed {}", cur);
@@ -50,8 +50,8 @@ mod tests {
                         .flat_map(|i| b2.transform(i).par_bridge())
                         //-- same
                         .flat_map(|i| l.transform(i).par_bridge())
-                        .flat_map(|i| n.transform(i).par_bridge())
-                        .for_each(|_| {
+                        .for_each(|i| {
+                            n.close(i);
                             let cur = counter.fetch_add(1, Ordering::Relaxed);
                             if cur % 1_000_000 == 0 {
                                 eprintln!("processed {}", cur);
@@ -61,6 +61,6 @@ mod tests {
             });
 
         let count = counter.load(Ordering::Relaxed);
-        assert_eq!(count, 12);
+        assert_eq!(count, 13);
     }
 }

@@ -3,21 +3,25 @@ pub struct FlowFile<T> {
     pub source: String,
 }
 
-impl FlowFile<()> {
-    pub fn genesis() -> Self {
-        Self {
-            data: (),
-            source: String::new(),
-        }
-    }
-}
-
 pub trait Transform {
     type Input;
     type Output;
     type Iter: Iterator<Item = FlowFile<Self::Output>> + Send;
 
     fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter;
+}
+
+pub trait StartTransform {
+    type Output;
+    type Iter: Iterator<Item = FlowFile<Self::Output>> + Send;
+
+    fn start(&self) -> Self::Iter;
+}
+
+pub trait CloseTransform {
+    type Input;
+
+    fn close(&self, input: FlowFile<Self::Input>);
 }
 
 pub struct CloseableIter<I: Iterator, F: Fn()> {
