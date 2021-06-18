@@ -1,10 +1,42 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 pub struct FlowFile<T> {
     pub data: T,
-    pub source: String,
+    pub meta: FlowFileMeta,
+}
+
+impl<T> FlowFile<T> {
+    pub fn new(data: T) -> Self {
+        Self {
+            data,
+            meta: FlowFileMeta::new(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct FlowFileMeta {
+    source: String,
+    failed: Option<&'static AtomicBool>,
+}
+
+impl FlowFileMeta {
+    fn new() -> Self {
+        FlowFileMeta {
+            source: String::new(),
+            failed: None,
+        }
+    }
+
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+
+    pub fn add_source(&mut self, s: &str) {
+        self.source.push_str(s)
+    }
 }
 
 #[derive(Clone)]

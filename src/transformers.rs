@@ -18,24 +18,18 @@ impl StartTransform for Glob {
     type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
 
     fn start(&self) -> Self::Iter {
-        let iter = self
-            .patterns
+        self.patterns
             .clone()
             .into_iter()
             .flat_map(|pat| glob(&pat).expect("bad glob pattern"))
             .flat_map(|glob| match glob {
                 Ok(path) => Some(path),
                 Err(e) => {
-                    dbg!(e);
+                    log::error!("Exception in Glob {:?}", e);
                     None
                 }
             })
-            .map(|path| FlowFile {
-                data: path,
-                source: String::new(),
-            });
-
-        iter
+            .map(|path| FlowFile::new(path))
     }
 }
 
@@ -47,25 +41,22 @@ impl Transform for Unpack {
     type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
 
     fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter {
-        let input = input.data; // unwrap flowfile
+        let FlowFile { data, mut meta } = input;
 
-        let file = File::open(&input).unwrap();
-        let reader = if matches!(input.to_str(), Some(p) if p.ends_with(".gz")) {
+        let file = File::open(&data).unwrap();
+        let reader = if matches!(data.to_str(), Some(p) if p.ends_with(".gz")) {
             Box::new(GzDecoder::new(file)) as Box<dyn Read + Send + Sync>
         } else {
             Box::new(file) as _
         };
 
-        let flow_file = FlowFile {
-            data: reader,
-            source: input.to_string_lossy().into(),
-        };
+        // set file path as source
+        meta.add_source(&data.to_string_lossy());
+
+        let flow_file = FlowFile { data: reader, meta };
         let iter = std::iter::once(flow_file);
 
-        let closeable =
-            CloseableIter::new(iter, move || log::debug!("done processing {:?}", input));
-
-        closeable
+        CloseableIter::new(iter, move || log::debug!("done processing {:?}", data))
     }
 }
 
@@ -77,17 +68,18 @@ impl Transform for Lines {
     type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
 
     fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter {
-        let FlowFile { data, source } = input;
-        let iter = BufReader::new(data)
+        let FlowFile { data, meta } = input;
+
+        BufReader::new(data)
             .lines()
             .flat_map(Result::ok)
             .enumerate()
-            .map(move |(i, l)| FlowFile {
-                data: l,
-                source: format!("{}:{}", source, i),
-            });
+            .map(move |(i, l)| {
+                let mut my_meta = meta.clone();
+                my_meta.add_source(&format!(":{}", i));
 
-        iter
+                FlowFile { data: l, meta: my_meta }
+            })
     }
 }
 
@@ -141,22 +133,23 @@ impl Transform for Csv {
     type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
 
     fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter {
-        let FlowFile { data, source } = input;
-        let iter = csv::Reader::from_reader(data)
+        let FlowFile { data, meta } = input;
+        csv::Reader::from_reader(data)
             .into_records()
             .flat_map(|r| match r {
                 Ok(v) => Some(v),
                 Err(e) => {
-                    dbg!(e);
+                    log::error!("Exception in Csv: {:?}", e);
                     None
                 }
             })
             .enumerate()
-            .map(move |(i, r)| FlowFile {
-                data: r,
-                source: format!("{}:{}", source, i),
-            });
-        iter
+            .map(move |(i, r)| {
+                let mut my_meta = meta.clone();
+                my_meta.add_source(&format!(":{}", i));
+
+                FlowFile { data: r, meta: my_meta }
+            })
     }
 }
 
@@ -185,7 +178,7 @@ impl CloseTransform for Write {
     type Input = String;
 
     fn close(&self, input: FlowFile<Self::Input>) {
-        let FlowFile { data, source } = input;
+        let FlowFile { data, meta } = input;
         let data = data.as_bytes();
 
         let mut header = tar::Header::new_gnu();
@@ -193,7 +186,7 @@ impl CloseTransform for Write {
         header.set_cksum();
 
         let mut ar = self.builder.lock().unwrap();
-        ar.append_data(&mut header, &source, data).unwrap();
+        ar.append_data(&mut header, meta.source(), data).unwrap();
     }
 }
 
