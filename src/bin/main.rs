@@ -11,25 +11,24 @@ fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
     let g = Glob {
-        patterns: vec!["open*.csv".to_string()],
+        patterns: vec!["*.csv.gz".to_string()],
     };
     let u = Unpack {};
-    let l = Lines {};
-    /*
+    //let l = Lines {};
     let c = Csv {};
-    */
-    let f = Contains::new("1");
-    let w = Write::new("output.tar.gz");
+    //let f = Contains::new("1");
+    //let w = Write::new("output.tar.gz");
+    let n = Nullify::default();
 
     let stats = Stats::new();
 
     g.start()
         .par_bridge()
         .flat_map(|i| u.transform(i).par_bridge())
-        .flat_map(|i| l.transform(i).par_bridge())
-        .flat_map(|i| f.transform(i).par_bridge())
+        .flat_map(|i| c.transform(i).par_bridge())
+        //.flat_map(|i| f.transform(i).par_bridge())
         .for_each(|i| {
-            w.close(i);
+            n.close(i);
             stats.increment();
         });
 }

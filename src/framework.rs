@@ -37,6 +37,12 @@ impl FlowFileMeta {
     pub fn add_source(&mut self, s: &str) {
         self.source.push_str(s)
     }
+
+    pub fn mark_failed(&self) {
+        if let Some(failed) = &self.failed {
+            failed.store(true, Ordering::SeqCst);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -99,27 +105,51 @@ pub trait CloseTransform {
     fn close(&self, input: FlowFile<Self::Input>);
 }
 
-pub struct CloseableIter<I: Iterator, F: Fn()> {
+pub struct CloseableIter<R, I: Iterator<Item = FlowFile<R>>, F1: Fn(), F2: Fn()> {
     iter: I,
-    after: F,
+    has_failed: &'static AtomicBool,
+    on_success: F1,
+    on_failure: F2,
 }
 
-impl<I: Iterator, F: Fn()> CloseableIter<I, F> {
-    pub fn new(iter: I, after: F) -> Self {
-        Self { iter, after }
+impl<R, I: Iterator<Item = FlowFile<R>>, F1: Fn(), F2: Fn()> CloseableIter<R, I, F1, F2> {
+    pub fn new(iter: I, on_success: F1, on_failure: F2) -> Self {
+        let failed = AtomicBool::new(false);
+
+        // For performance reasons, put the bool on the stack and leak it (make it 'static').
+        // Then we don't need to refcount it all the way down the pipeline (via Arc).
+        let has_failed = Box::leak(Box::new(failed));
+
+        Self {
+            iter,
+            has_failed,
+            on_success,
+            on_failure,
+        }
     }
 }
 
-impl<I: Iterator, F: Fn()> Iterator for CloseableIter<I, F> {
+impl<R, I: Iterator<Item = FlowFile<R>>, F1: Fn(), F2: Fn()> Iterator
+    for CloseableIter<R, I, F1, F2>
+{
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
+        self.iter.next().map(|mut f| {
+            if f.meta.failed.is_none() {
+                f.meta.failed = Some(self.has_failed);
+            }
+            f
+        })
     }
 }
 
-impl<I: Iterator, F: Fn()> Drop for CloseableIter<I, F> {
+impl<R, I: Iterator<Item = FlowFile<R>>, F1: Fn(), F2: Fn()> Drop for CloseableIter<R, I, F1, F2> {
     fn drop(&mut self) {
-        (self.after)()
+        if self.has_failed.load(Ordering::SeqCst) {
+            (self.on_failure)()
+        } else {
+            (self.on_success)()
+        }
     }
 }

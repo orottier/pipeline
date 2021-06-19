@@ -44,6 +44,8 @@ impl Transform for Unpack {
         let FlowFile { data, mut meta } = input;
 
         let file = File::open(&data).unwrap();
+        log::debug!("now processing {}", &data.to_string_lossy());
+
         let reader = if matches!(data.to_str(), Some(p) if p.ends_with(".gz")) {
             Box::new(GzDecoder::new(file)) as Box<dyn Read + Send + Sync>
         } else {
@@ -56,7 +58,12 @@ impl Transform for Unpack {
         let flow_file = FlowFile { data: reader, meta };
         let iter = std::iter::once(flow_file);
 
-        CloseableIter::new(iter, move || log::debug!("done processing {:?}", data))
+        let data_clone = data.clone();
+        CloseableIter::new(
+            iter,
+            move || log::debug!("processing success {:?}", data_clone),
+            move || log::debug!("processing failure {:?}", data),
+        )
     }
 }
 
@@ -72,13 +79,22 @@ impl Transform for Lines {
 
         BufReader::new(data)
             .lines()
-            .flat_map(Result::ok)
             .enumerate()
-            .map(move |(i, l)| {
-                let mut my_meta = meta.clone();
-                my_meta.add_source(&format!(":{}", i));
+            .flat_map(move |(i, lr)| match lr {
+                Ok(l) => {
+                    let mut my_meta = meta.clone();
+                    my_meta.add_source(&format!(":{}", i));
 
-                FlowFile { data: l, meta: my_meta }
+                    Some(FlowFile {
+                        data: l,
+                        meta: my_meta,
+                    })
+                }
+                Err(e) => {
+                    log::error!("Exception in Lines: {:?}", e);
+                    meta.mark_failed();
+                    None
+                }
             })
     }
 }
@@ -134,21 +150,25 @@ impl Transform for Csv {
 
     fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter {
         let FlowFile { data, meta } = input;
+
         csv::Reader::from_reader(data)
             .into_records()
-            .flat_map(|r| match r {
-                Ok(v) => Some(v),
+            .enumerate()
+            .flat_map(move |(i, r)| match r {
+                Ok(v) => {
+                    let mut my_meta = meta.clone();
+                    my_meta.add_source(&format!(":{}", i));
+
+                    Some(FlowFile {
+                        data: v,
+                        meta: my_meta,
+                    })
+                }
                 Err(e) => {
                     log::error!("Exception in Csv: {:?}", e);
+                    meta.mark_failed();
                     None
                 }
-            })
-            .enumerate()
-            .map(move |(i, r)| {
-                let mut my_meta = meta.clone();
-                my_meta.add_source(&format!(":{}", i));
-
-                FlowFile { data: r, meta: my_meta }
             })
     }
 }

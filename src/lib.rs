@@ -61,6 +61,6 @@ mod tests {
             });
 
         let count = counter.load(Ordering::Relaxed);
-        assert_eq!(count, 13);
+        assert_eq!(count, 15);
     }
 }
