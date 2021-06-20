@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 pub struct Glob {
-    pub patterns: Vec<String>,
+    patterns: Vec<String>,
 }
 
 impl StartTransform for Glob {
@@ -32,7 +32,19 @@ impl StartTransform for Glob {
     }
 }
 
+impl From<Vec<String>> for Glob {
+    fn from(args: Vec<String>) -> Self {
+        Self { patterns: args }
+    }
+}
+
 pub struct Unpack {}
+
+impl From<Vec<String>> for Unpack {
+    fn from(_args: Vec<String>) -> Self {
+        Self {}
+    }
+}
 
 impl Transform for Unpack {
     type Input = PathBuf;
@@ -68,6 +80,12 @@ impl Transform for Unpack {
 
 pub struct Lines {}
 
+impl From<Vec<String>> for Lines {
+    fn from(_args: Vec<String>) -> Self {
+        Self {}
+    }
+}
+
 impl Transform for Lines {
     type Input = Box<dyn Read + Send + Sync>;
     type Output = String;
@@ -102,8 +120,8 @@ pub struct Nullify<A> {
     marker: PhantomData<A>,
 }
 
-impl<A> Default for Nullify<A> {
-    fn default() -> Self {
+impl<A> From<Vec<String>> for Nullify<A> {
+    fn from(_args: Vec<String>) -> Self {
         Self {
             marker: PhantomData,
         }
@@ -130,6 +148,12 @@ impl<A> Default for Identity<A> {
     }
 }
 
+impl<A> From<Vec<String>> for Identity<A> {
+    fn from(_args: Vec<String>) -> Self {
+        Self::default()
+    }
+}
+
 impl<A: Send + Sync + 'static> Transform for Identity<A> {
     type Input = A;
     type Output = A;
@@ -141,6 +165,12 @@ impl<A: Send + Sync + 'static> Transform for Identity<A> {
 }
 
 pub struct Csv {}
+
+impl From<Vec<String>> for Csv {
+    fn from(_args: Vec<String>) -> Self {
+        Self {}
+    }
+}
 
 impl Transform for Csv {
     type Input = Box<dyn Read + Send + Sync>;
@@ -174,6 +204,12 @@ impl Transform for Csv {
 
 pub struct Write {
     builder: Mutex<tar::Builder<GzEncoder<BufWriter<File>>>>,
+}
+
+impl From<Vec<String>> for Write {
+    fn from(args: Vec<String>) -> Self {
+        Self::new(&args[0])
+    }
 }
 
 impl Write {
@@ -214,10 +250,10 @@ pub struct Contains<R> {
     _marker: PhantomData<R>,
 }
 
-impl<R> Contains<R> {
-    pub fn new<S: Into<String>>(needle: S) -> Self {
+impl<R> From<Vec<String>> for Contains<R> {
+    fn from(mut args: Vec<String>) -> Self {
         Self {
-            needle: needle.into(),
+            needle: args.remove(0),
             _marker: PhantomData,
         }
     }

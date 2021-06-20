@@ -10,15 +10,13 @@ fn main() {
     // setup logger, DEBUG level by default
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
-    let g = Glob {
-        patterns: vec!["*.csv.gz".to_string()],
-    };
+    let g = Glob::from(vec!["*.csv.gz".to_string()]);
     let u = Unpack {};
     //let l = Lines {};
     let c = Csv {};
     //let f = Contains::new("1");
     //let w = Write::new("output.tar.gz");
-    let n = Nullify::default();
+    let n = Nullify::from(vec![]);
 
     let stats = Stats::new();
 

@@ -1,0 +1,5 @@
+Glob *.csv "*.csv.gz"
+Unpack
+Lines
+Contains 1234
+Write output.tar.gz

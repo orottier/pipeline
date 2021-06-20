@@ -84,7 +84,7 @@ impl Drop for Stats {
     }
 }
 
-pub trait Transform {
+pub trait Transform: From<Vec<String>> {
     type Input;
     type Output;
     type Iter: Iterator<Item = FlowFile<Self::Output>> + Send;
@@ -92,14 +92,14 @@ pub trait Transform {
     fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter;
 }
 
-pub trait StartTransform {
+pub trait StartTransform: From<Vec<String>> {
     type Output;
     type Iter: Iterator<Item = FlowFile<Self::Output>> + Send;
 
     fn start(self) -> Self::Iter;
 }
 
-pub trait CloseTransform {
+pub trait CloseTransform: From<Vec<String>> {
     type Input;
 
     fn close(&self, input: FlowFile<Self::Input>);

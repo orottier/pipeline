@@ -15,12 +15,10 @@ mod tests {
 
     #[test]
     fn test_nonlinear_flow() {
-        let g = Glob {
-            patterns: vec!["*.toml".into()],
-        };
+        let g = Glob::from(vec!["*.toml".to_string()]);
         let u = Unpack {};
         let l = Lines {};
-        let n = Nullify::default();
+        let n = Nullify::from(vec![]);
 
         let a1 = Identity::default();
         let a2 = Identity::default();
