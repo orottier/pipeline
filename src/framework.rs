@@ -96,7 +96,7 @@ pub trait StartTransform {
     type Output;
     type Iter: Iterator<Item = FlowFile<Self::Output>> + Send;
 
-    fn start(&self) -> Self::Iter;
+    fn start(self) -> Self::Iter;
 }
 
 pub trait CloseTransform {

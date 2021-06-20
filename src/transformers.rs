@@ -17,9 +17,8 @@ impl StartTransform for Glob {
     type Output = PathBuf;
     type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
 
-    fn start(&self) -> Self::Iter {
+    fn start(self) -> Self::Iter {
         self.patterns
-            .clone()
             .into_iter()
             .flat_map(|pat| glob(&pat).expect("bad glob pattern"))
             .flat_map(|glob| match glob {
@@ -29,7 +28,7 @@ impl StartTransform for Glob {
                     None
                 }
             })
-            .map(|path| FlowFile::new(path))
+            .map(FlowFile::new)
     }
 }
 
