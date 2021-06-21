@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
+#[derive(Debug)]
 pub struct FlowFile<T> {
     pub data: T,
     pub meta: FlowFileMeta,
@@ -16,7 +17,7 @@ impl<T> FlowFile<T> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FlowFileMeta {
     source: String,
     failed: Option<&'static AtomicBool>,

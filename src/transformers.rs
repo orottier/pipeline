@@ -3,6 +3,7 @@ use crate::framework::*;
 use flate2::{read::GzDecoder, write::GzEncoder};
 use glob::glob;
 
+use std::collections::{hash_map, HashMap};
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Read};
 use std::marker::PhantomData;
@@ -194,6 +195,22 @@ impl<A: Send + Sync + std::fmt::Debug + 'static> Transform for ToString<A> {
     }
 }
 
+pub struct StdOut {}
+
+impl From<Vec<String>> for StdOut {
+    fn from(_args: Vec<String>) -> Self {
+        Self {}
+    }
+}
+
+impl CloseTransform for StdOut {
+    type Input = String;
+
+    fn close(&self, input: FlowFile<Self::Input>) {
+        println!("{:?}", input);
+    }
+}
+
 pub struct Csv {}
 
 impl From<Vec<String>> for Csv {
@@ -319,5 +336,69 @@ impl<S: CheckContains + Send> Transform for Contains<S> {
     fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter {
         let contains = input.data.contains(&self.needle);
         std::iter::once(input).filter(move |_| contains)
+    }
+}
+
+pub struct CsvInnerJoin {}
+
+impl From<Vec<String>> for CsvInnerJoin {
+    fn from(_args: Vec<String>) -> Self {
+        Self {}
+    }
+}
+
+struct CsvInnerJoinIter<I> {
+    csv: I,
+    pending: Option<HashMap<String, FlowFile<csv::StringRecord>>>,
+    flush: Option<hash_map::IntoIter<String, FlowFile<csv::StringRecord>>>,
+}
+
+impl<I: Iterator<Item = FlowFile<csv::StringRecord>>> Iterator for CsvInnerJoinIter<I> {
+    type Item = FlowFile<csv::StringRecord>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.pending.is_some() {
+                if let Some(r) = self.csv.next() {
+                    let id = r.data.get(0).unwrap();
+                    let reference = r.data.get(2).unwrap();
+
+                    if !reference.is_empty() {
+                        self.pending
+                            .as_mut()
+                            .unwrap()
+                            .insert(reference.to_string(), r);
+                    } else if let Some(mut earlier) = self.pending.as_mut().unwrap().remove(id) {
+                        earlier.data.push_field(r.data.get(1).unwrap());
+                        return Some(earlier);
+                    } else {
+                        return Some(r);
+                    }
+                } else {
+                    self.flush = Some(self.pending.take().unwrap().into_iter());
+                }
+            }
+
+            if let Some(flush) = &mut self.flush {
+                return flush.next().map(|(_k, v)| v);
+            }
+        }
+    }
+}
+
+impl Transform for CsvInnerJoin {
+    type Input = Box<dyn Read + Send + Sync>;
+    type Output = csv::StringRecord;
+    type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
+
+    fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter {
+        let csv = Csv {};
+        let csv_iter = csv.transform(input);
+
+        CsvInnerJoinIter {
+            csv: csv_iter,
+            pending: Some(HashMap::new()),
+            flush: None,
+        }
     }
 }
