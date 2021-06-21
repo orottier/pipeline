@@ -164,6 +164,36 @@ impl<A: Send + Sync + 'static> Transform for Identity<A> {
     }
 }
 
+pub struct ToString<A> {
+    marker: PhantomData<A>,
+}
+
+impl<A> Default for ToString<A> {
+    fn default() -> Self {
+        Self {
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<A> From<Vec<String>> for ToString<A> {
+    fn from(_args: Vec<String>) -> Self {
+        Self::default()
+    }
+}
+
+impl<A: Send + Sync + std::fmt::Debug + 'static> Transform for ToString<A> {
+    type Input = A;
+    type Output = String;
+    type Iter = impl Iterator<Item = FlowFile<Self::Output>> + Send;
+
+    fn transform(&self, input: FlowFile<Self::Input>) -> Self::Iter {
+        let FlowFile { data, meta } = input;
+        let data = format!("{:?}", data);
+        std::iter::once(FlowFile { data, meta })
+    }
+}
+
 pub struct Csv {}
 
 impl From<Vec<String>> for Csv {

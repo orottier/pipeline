@@ -1,5 +1,8 @@
-Glob *.csv "*.csv.gz"
+Glob *.csv "*.toml"
 Unpack
-Lines
+Junction:3 SplitByExt csv toml
+Csv
 Contains 1234
+ToString
+Lines
 Write output.tar.gz

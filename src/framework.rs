@@ -70,10 +70,19 @@ impl Stats {
         self.total.fetch_add(1, Ordering::Relaxed);
     }
 
+    pub fn total(&self) -> u64 {
+        self.total.load(Ordering::Relaxed)
+    }
+
+    pub fn elapsed(&self) -> Duration {
+        SystemTime::now().duration_since(self.start).unwrap()
+    }
+
     fn report(&self) {
-        let total = self.total.load(Ordering::Relaxed);
-        let elapsed = SystemTime::now().duration_since(self.start).unwrap();
-        let rate = total * 1000 / elapsed.as_millis() as u64;
+        let total = self.total();
+        let elapsed = self.elapsed();
+        let millis = elapsed.as_millis() as u64;
+        let rate = if millis > 0 { total * 1000 / millis } else { 0 };
         log::info!("Processed {:10} items at {:10} msgs/sec", total, rate);
     }
 }
@@ -152,4 +161,10 @@ impl<R, I: Iterator<Item = FlowFile<R>>, F1: Fn(), F2: Fn()> Drop for CloseableI
             (self.on_success)()
         }
     }
+}
+
+pub trait Junction: From<Vec<String>> {
+    type Input;
+
+    fn split(&self, input: &FlowFile<Self::Input>) -> u8;
 }
